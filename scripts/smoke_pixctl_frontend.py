@@ -132,22 +132,49 @@ def _call_do_upscale(**overrides):
     return last
 
 
+def _collect_do_upscale(**overrides):
+    from src.ui import _do_upscale
+    defaults = dict(
+        user_backend_path="",
+        img_path=None,
+        scale_str="2",
+        model="realesrgan-x4plus",
+        face_enhance=False,
+        fmt="png",
+        quality=90,
+        auto_compress=False,
+        max_width_str="original",
+        target_size_str="none",
+    )
+    defaults.update(overrides)
+    return list(_do_upscale(**defaults))
+
+
+def _assert_upscale_output_contract(items):
+    assert items, "Expected at least one callback yield"
+    for item in items:
+        assert isinstance(item, tuple) and len(item) == 8, f"Expected 8-tuple, got {item!r}"
+
+
 def _test_upscale_no_image():
-    result = _call_do_upscale(img_path=None, user_backend_path="")
-    assert isinstance(result, tuple) and len(result) == 7, "Expected 7-tuple"
+    items = _collect_do_upscale(img_path=None, user_backend_path="")
+    _assert_upscale_output_contract(items)
+    result = items[-1]
     assert result[0] is None, "Expected None output image for missing input"
-    assert result[2] is None, "Expected None master path for missing input"
+    assert result[1] == "", "Expected empty optimized export link for missing input"
+    assert result[2] == "", "Expected empty master link for missing input"
     assert isinstance(result[3], str), "Expected str log"
     assert "No input image" in result[3], f"Unexpected log: {result[3]!r}"
 
-_check("_do_upscale(img=None): returns (None, str, str) — no exception", _test_upscale_no_image)
+_check("_do_upscale(img=None): returns 8-value UI contract — no exception", _test_upscale_no_image)
 
 
 def _test_upscale_empty_backend():
     tmp = _make_test_image()
     try:
-        result = _call_do_upscale(img_path=tmp, user_backend_path="")
-        assert isinstance(result, tuple) and len(result) == 7, "Expected 7-tuple"
+        items = _collect_do_upscale(img_path=tmp, user_backend_path="")
+        _assert_upscale_output_contract(items)
+        result = items[-1]
         assert isinstance(result[3], str), "Expected str log"
     finally:
         Path(tmp).unlink(missing_ok=True)
@@ -158,16 +185,55 @@ _check("_do_upscale(backend=''): returns clean tuple — no exception", _test_up
 def _test_upscale_invalid_backend():
     tmp = _make_test_image()
     try:
-        result = _call_do_upscale(
+        items = _collect_do_upscale(
             img_path=tmp,
             user_backend_path="/nonexistent/realesrgan",
         )
-        assert isinstance(result, tuple) and len(result) == 7, "Expected 7-tuple"
+        _assert_upscale_output_contract(items)
+        result = items[-1]
         assert isinstance(result[3], str), "Expected str log"
     finally:
         Path(tmp).unlink(missing_ok=True)
 
 _check("_do_upscale(backend='/nonexistent/realesrgan'): returns clean tuple — no exception", _test_upscale_invalid_backend)
+
+
+def _test_upscale_success_mapping():
+    from src import ui
+    from src.realesrgan_runner import Backend, RunResult
+
+    tmp = _make_test_image()
+    original_detect_backend = ui.detect_backend
+    original_run_upscale = ui.run_upscale
+
+    def fake_detect_backend(_path):
+        return Backend(kind="ncnn", path=Path("/tmp/fake-realesrgan"), available=True, supports_face_enhance=False)
+
+    def fake_run_upscale(_backend, input_path, output_path, **_kwargs):
+        from PIL import Image
+        with Image.open(input_path) as img:
+            img.save(output_path)
+        return RunResult(success=True, stdout="", stderr="", returncode=0, duration=0.1, output_path=output_path)
+
+    try:
+        ui.detect_backend = fake_detect_backend
+        ui.run_upscale = fake_run_upscale
+        items = _collect_do_upscale(img_path=tmp, user_backend_path="")
+        _assert_upscale_output_contract(items)
+        result = items[-1]
+        assert result[0], "Expected optimized output preview path"
+        assert Path(result[0]).exists(), f"Preview path does not exist: {result[0]}"
+        assert 'class="download-link"' in result[1], "Expected optimized export download link HTML"
+        assert 'Download optimized export' in result[1], "Expected optimized export label"
+        assert 'class="download-link"' in result[2], "Expected master download link HTML"
+        assert 'Download full-quality master (PNG)' in result[2], "Expected master label"
+        assert "Open full-size preview" in result[7], "Expected full-size preview link"
+    finally:
+        ui.detect_backend = original_detect_backend
+        ui.run_upscale = original_run_upscale
+        Path(tmp).unlink(missing_ok=True)
+
+_check("_do_upscale(success): preview path plus HTML download links", _test_upscale_success_mapping)
 
 
 # ── Summary ────────────────────────────────────────────────────────────────────

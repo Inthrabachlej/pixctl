@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import socket
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 _LOCAL_CONFIG_FILE = BASE_DIR / ".pixctl.local.json"
+_log = logging.getLogger(__name__)
 
 
 def load_local_config() -> dict:
@@ -16,8 +18,9 @@ def load_local_config() -> dict:
                 data = json.load(f)
             if isinstance(data, dict):
                 return data
-    except Exception:
-        pass
+            _log.warning("Local config %s is not a JSON object; ignoring.", _LOCAL_CONFIG_FILE)
+    except (OSError, json.JSONDecodeError) as exc:
+        _log.warning("Could not read local config from %s: %s", _LOCAL_CONFIG_FILE, exc)
     return {}
 
 
@@ -28,8 +31,8 @@ def save_local_config(updates: dict) -> None:
     try:
         with _LOCAL_CONFIG_FILE.open("w") as f:
             json.dump(current, f, indent=2)
-    except Exception:
-        pass
+    except OSError as exc:
+        _log.warning("Could not save local config to %s: %s", _LOCAL_CONFIG_FILE, exc)
 
 OUTPUTS = {
     "upscaled": BASE_DIR / "outputs" / "upscaled",
@@ -86,5 +89,5 @@ def init_dirs() -> None:
     for f in TEMP_DIR.iterdir():
         try:
             f.unlink()
-        except Exception:
-            pass
+        except OSError as exc:
+            _log.warning("Could not remove temp file %s: %s", f, exc)

@@ -6,7 +6,7 @@ build-backend = "setuptools.backends.legacy:build"
 name = "pixctl"
 version = "0.1.1"
 description = "Local Real-ESRGAN UI with compression workflow"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "gradio>=4.40,<5",

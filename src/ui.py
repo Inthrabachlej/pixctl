@@ -1,6 +1,8 @@
+import html as _html
 import threading
 import time
 from pathlib import Path
+from urllib.parse import quote as _url_quote
 
 import gradio as gr
 from PIL import Image as PILImage
@@ -342,9 +344,45 @@ button:not([disabled]):active {
     letter-spacing: 0.5px;
     color: #4ade80;
 }
-.downloads-section .file-preview {
-    background: rgba(0, 0, 0, 0.25) !important;
-    border-radius: 6px !important;
+
+/* ── Download links ── */
+.download-link {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 6px 0;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(34, 197, 94, 0.18);
+    background: rgba(0, 0, 0, 0.22);
+    color: #bbf7d0;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+}
+.download-link:hover {
+    border-color: rgba(34, 197, 94, 0.32);
+    color: #dcfce7;
+}
+
+/* ── Preview open link ── */
+.preview-open-cta {
+    text-align: right;
+    padding: 4px 2px 0;
+}
+.preview-open-link {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #6ee7b7;
+    text-decoration: none;
+    letter-spacing: 0.15px;
+    opacity: 0.75;
+    transition: opacity 140ms ease, color 140ms ease;
+}
+.preview-open-link:hover {
+    opacity: 1;
+    color: #a7f3d0;
 }
 """
 
@@ -354,8 +392,8 @@ button:not([disabled]):active {
 def _info_card_html(metrics: list[tuple[str, str, str]]) -> str:
     items = "".join(
         f'<div class="info-metric">'
-        f'<div class="info-metric-label">{lbl}</div>'
-        f'<div class="info-metric-value {cls}">{val}</div>'
+        f'<div class="info-metric-label">{_html.escape(lbl)}</div>'
+        f'<div class="info-metric-value {_html.escape(cls)}">{_html.escape(val)}</div>'
         f'</div>'
         for lbl, val, cls in metrics
     )
@@ -378,15 +416,42 @@ def _empty_output_info() -> str:
 
 
 def _status_processing(text: str) -> str:
-    return f'<div class="upscale-progress">{text}</div>'
+    return f'<div class="upscale-progress">{_html.escape(text)}</div>'
 
 
 def _status_done(text: str) -> str:
-    return f'<div class="upscale-done">{text}</div>'
+    return f'<div class="upscale-done">{_html.escape(text)}</div>'
 
 
 def _status_fail(text: str) -> str:
-    return f'<div class="upscale-fail">{text}</div>'
+    return f'<div class="upscale-fail">{_html.escape(text)}</div>'
+
+
+def _preview_link_html(path: str | None) -> str:
+    if not path:
+        return ""
+    url = _file_url(path)
+    return (
+        '<div class="preview-open-cta">'
+        f'<a href="{url}" target="_blank" rel="noopener" class="preview-open-link">'
+        "Open full-size preview ↗</a></div>"
+    )
+
+
+def _file_url(path: str | None) -> str:
+    if not path:
+        return ""
+    return "/file=" + _url_quote(path, safe="/:")
+
+
+def _download_link_html(path: str | None, label: str) -> str:
+    if not path:
+        return ""
+    url = _file_url(path)
+    return (
+        f'<a href="{url}" download target="_blank" rel="noopener" class="download-link">'
+        f'{_html.escape(label)}</a>'
+    )
 
 
 def _input_image_info(img_path: str | None) -> str:
@@ -408,7 +473,7 @@ def _input_image_info(img_path: str | None) -> str:
 def _build_header_html(backend) -> str:
     if backend.available:
         badge_cls = "backend-ok"
-        badge_label = f"● {backend.kind}"
+        badge_label = f"● {_html.escape(backend.kind)}"
     else:
         badge_cls = "backend-none"
         badge_label = "○ no backend"
@@ -440,29 +505,30 @@ def _do_upscale(
     max_width_str: str,
     target_size_str: str,
 ):
-    """Generator — yields (img_out, export_out, master_out, log, out_info, btn_update, status) for live UI feedback."""
+    """Yield (preview, export_link, master_link, log, info, button, status, preview_link)."""
 
     _BTN_IDLE = gr.update(interactive=True, value="Run Upscale")
 
     # Immediately disable button and clear stale output
-    yield None, None, None, "Preparing…", _empty_output_info(), gr.update(interactive=False, value="Processing…"), _status_processing("Preparing upscale pipeline…")
+    yield None, "", "", "Preparing…", _empty_output_info(), gr.update(interactive=False, value="Processing…"), _status_processing("Preparing upscale pipeline…"), ""
 
     backend = detect_backend(user_backend_path or None)
 
     if not img_path:
-        yield None, None, None, "No input image provided.", _empty_output_info(), _BTN_IDLE, _status_fail("No input image")
+        yield None, "", "", "No input image provided.", _empty_output_info(), _BTN_IDLE, _status_fail("No input image"), ""
         return
     if not backend.available:
         yield (
             None,
-            None,
-            None,
+            "",
+            "",
             "Real-ESRGAN backend is required. Add a valid Real-ESRGAN folder or executable path.\n"
             "Examples: /path/to/Real-ESRGAN  or  /path/to/realesrgan-ncnn-vulkan\n"
             "Compression is still available without it.",
             _empty_output_info(),
             _BTN_IDLE,
             _status_fail("No backend available"),
+            "",
         )
         return
 
@@ -569,16 +635,26 @@ def _do_upscale(
             gr.update(),
             gr.update(interactive=False, value=f"Processing… {int(elapsed)}s"),
             _status_processing(f"Upscaling in progress · {int(elapsed)}s"),
+            gr.update(),
         )
 
     # Thread finished — surface result or exception in the log
     elapsed = time.monotonic() - t0
     if result_bag[1] is not None:
-        yield None, None, None, f"Error: {result_bag[1]}", _empty_output_info(), _BTN_IDLE, _status_fail(f"Upscale failed · {elapsed:.1f}s")
+        yield None, "", "", f"Error: {result_bag[1]}", _empty_output_info(), _BTN_IDLE, _status_fail(f"Upscale failed · {elapsed:.1f}s"), ""
         return
 
     out_path, master_path_str, log, info_html = result_bag[0]
-    yield out_path, out_path, master_path_str, log, info_html, _BTN_IDLE, _status_done(f"Enhancement complete · {elapsed:.1f}s")
+    yield (
+        out_path,
+        _download_link_html(out_path, "Download optimized export"),
+        _download_link_html(master_path_str, "Download full-quality master (PNG)"),
+        log,
+        info_html,
+        _BTN_IDLE,
+        _status_done(f"Enhancement complete · {elapsed:.1f}s"),
+        _preview_link_html(out_path),
+    )
 
 
 def _upscale_tab(backend) -> gr.Tab:
@@ -596,10 +672,16 @@ def _upscale_tab(backend) -> gr.Tab:
         )
         with gr.Row():
             with gr.Column():
-                img_in = gr.Image(label="Input image", type="filepath")
+                img_in = gr.Image(label="Input image", type="filepath", sources=["upload", "clipboard"])
                 in_info = gr.HTML(_empty_input_info())
             with gr.Column():
-                img_out = gr.Image(label="Output preview", interactive=False)
+                img_out = gr.Image(
+                    label="Output preview",
+                    interactive=False,
+                    show_fullscreen_button=True,
+                    elem_id="upscale-output-preview",
+                )
+                preview_link = gr.HTML("")
                 with gr.Group(elem_classes=["downloads-section"]):
                     gr.HTML(
                         '<div class="downloads-header">'
@@ -607,8 +689,8 @@ def _upscale_tab(backend) -> gr.Tab:
                         '<span class="downloads-title">Downloads</span>'
                         '</div>'
                     )
-                    export_out = gr.File(label="Optimized export", interactive=False)
-                    master_out = gr.File(label="Full-quality master (PNG)", interactive=False)
+                    export_out = gr.HTML("")
+                    master_out = gr.HTML("")
                 out_info = gr.HTML(_empty_output_info())
         with gr.Row():
             model = gr.Dropdown(
@@ -675,7 +757,7 @@ def _upscale_tab(backend) -> gr.Tab:
         run_btn.click(
             fn=_do_upscale,
             inputs=[backend_path_input, img_in, scale, model, face_enhance, fmt, quality, auto_compress, max_width, target_size],
-            outputs=[img_out, export_out, master_out, log_out, out_info, run_btn, status_out],
+            outputs=[img_out, export_out, master_out, log_out, out_info, run_btn, status_out, preview_link],
             show_progress="hidden",
         )
     return tab
@@ -690,9 +772,9 @@ def _do_compress(
     max_width_str: str,
     target_size_str: str,
     strip_meta: bool,
-) -> tuple[str | None, str, str]:
+) -> tuple[str | None, str, str, str]:
     if not img_path:
-        return None, "No input image provided.", _empty_output_info()
+        return None, "No input image provided.", _empty_output_info(), ""
 
     input_path = Path(img_path)
     out_name = timestamped_filename(input_path.stem, f".{fmt}")
@@ -700,7 +782,7 @@ def _do_compress(
     try:
         output_path = safe_output_path(OUTPUTS["compressed"], out_name)
     except FileExistsError as exc:
-        return None, str(exc), _empty_output_info()
+        return None, str(exc), _empty_output_info(), ""
 
     try:
         result = compress_image(
@@ -713,7 +795,7 @@ def _do_compress(
             strip_metadata=strip_meta,
         )
     except Exception as exc:
-        return None, f"Error: {exc}", _empty_output_info()
+        return None, f"Error: {exc}", _empty_output_info(), ""
 
     in_kb = result["input_size"] / 1024
     out_kb = result["output_size"] / 1024
@@ -730,7 +812,8 @@ def _do_compress(
         ("Ratio", f"{ratio * 100:.0f}%", ratio_cls),
         ("Format", fmt.upper(), "dim"),
     ])
-    return str(result["output_path"]), log, info_html
+    out_str = str(result["output_path"])
+    return out_str, log, info_html, _preview_link_html(out_str)
 
 
 def _compress_tab() -> gr.Tab:
@@ -748,10 +831,16 @@ def _compress_tab() -> gr.Tab:
         )
         with gr.Row():
             with gr.Column():
-                img_in = gr.Image(label="Input image", type="filepath")
+                img_in = gr.Image(label="Input image", type="filepath", sources=["upload", "clipboard"])
                 in_info = gr.HTML(_empty_input_info())
             with gr.Column():
-                img_out = gr.Image(label="Output preview", interactive=False)
+                img_out = gr.Image(
+                    label="Output preview",
+                    interactive=False,
+                    show_fullscreen_button=True,
+                    elem_id="compress-output-preview",
+                )
+                preview_link = gr.HTML("")
                 out_info = gr.HTML(_empty_output_info())
         with gr.Row():
             fmt = gr.Radio(
@@ -785,7 +874,7 @@ def _compress_tab() -> gr.Tab:
         run_btn.click(
             fn=_do_compress,
             inputs=[img_in, fmt, quality, max_width, target_size, strip_meta],
-            outputs=[img_out, log_out, out_info],
+            outputs=[img_out, log_out, out_info, preview_link],
             show_progress="hidden",
         )
     return tab
