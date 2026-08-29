@@ -14,5 +14,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
-      - run: pip install -r requirements.txt pytest
+      - run: pip install -r requirements.txt pytest build
       - run: python -m pytest -q
+      - run: python -m build --wheel
+      - name: Install built wheel into a clean venv and verify it's importable as pixctl
+        run: |
+          python -m venv /tmp/pixctl-install-check
+          /tmp/pixctl-install-check/bin/pip install dist/*.whl
+          /tmp/pixctl-install-check/bin/python -c "import pixctl; print('pixctl OK:', pixctl.__file__)"

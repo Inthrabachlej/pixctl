@@ -1,5 +1,11 @@
 import os
+import sys
 import time
+from pathlib import Path
+
+# Run directly from a source checkout (no `pip install .`) -- put the src-layout
+# package dir on sys.path so `from pixctl...` resolves without installation.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 # gradio-client 1.3.0 crashes when a JSON schema field is a bool (e.g. additionalProperties:true).
 # Patch: return "Any" for any non-dict schema; recursive calls go through this guard too.
@@ -11,9 +17,9 @@ def _gcu_safe(schema, defs, _orig=_gcu._json_schema_to_python_type):
 _gcu._json_schema_to_python_type = _gcu_safe
 del _gcu
 
-from src.config import HOST, init_dirs, resolve_port
-from src.realesrgan_runner import detect_backend
-from src.ui import build_ui
+from pixctl.config import HOST, init_dirs, resolve_port
+from pixctl.realesrgan_runner import detect_backend
+from pixctl.ui import build_ui
 
 if __name__ == "__main__":
     t0 = time.monotonic()

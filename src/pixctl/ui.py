@@ -7,10 +7,10 @@ from urllib.parse import quote as _url_quote
 import gradio as gr
 from PIL import Image as PILImage
 
-from src.config import OUTPUTS, TEMP_DIR, load_local_config, save_local_config
-from src.image_ops import MAX_WIDTHS, TARGET_SIZES, compress_image
-from src.realesrgan_runner import detect_backend, run_upscale
-from src.utils import placeholder_result, safe_output_path, timestamped_filename
+from pixctl.config import OUTPUTS, TEMP_DIR, load_local_config, save_local_config
+from pixctl.image_ops import MAX_WIDTHS, TARGET_SIZES, compress_image
+from pixctl.realesrgan_runner import detect_backend, run_upscale
+from pixctl.utils import placeholder_result, safe_output_path, timestamped_filename
 
 _UPSCALE_MODELS = [
     "realesrgan-x4plus",
@@ -912,7 +912,7 @@ def _batch_tab() -> gr.Tab:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def build_ui() -> gr.Blocks:
-    from src.config import load_local_config
+    from pixctl.config import load_local_config
     _saved_path = load_local_config().get("realesrgan_path", "")
     _initial_backend = detect_backend(_saved_path or None)
     with gr.Blocks(title="pixctl", theme=THEME, css=CUSTOM_CSS) as demo:

@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from PIL import Image
 
-from src.image_ops import compress_image
+from pixctl.image_ops import compress_image
 
 
 def test_unsupported_format_raises_value_error(tmp_path):

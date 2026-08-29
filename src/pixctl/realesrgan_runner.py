@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from src.config import BASE_DIR
+from pixctl.config import BASE_DIR
 
 _DEBUG = os.environ.get("PIXCTL_DEBUG") == "1"
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.utils import safe_output_path, timestamped_filename
+from pixctl.utils import safe_output_path, timestamped_filename
 
 
 def test_timestamped_filename_includes_microseconds():
@@ -41,7 +41,7 @@ def test_safe_output_path_collision_gets_suffix(tmp_path):
 def test_safe_output_path_double_collision_raises(tmp_path, monkeypatch):
     (tmp_path / "result.png").touch()
     # Make token_hex always return the same value so the fallback also collides.
-    monkeypatch.setattr("src.utils.secrets.token_hex", lambda _: "aabbcc")
+    monkeypatch.setattr("pixctl.utils.secrets.token_hex", lambda _: "aabbcc")
     (tmp_path / "result_aabbcc.png").touch()
     with pytest.raises(FileExistsError):
         safe_output_path(tmp_path, "result.png")

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.realesrgan_runner import Backend, run_upscale
+from pixctl.realesrgan_runner import Backend, run_upscale
 
 
 def _python_backend(tmp_path: Path) -> Backend:
